@@ -2,6 +2,7 @@
 ## lsf-convert Copyright 2014 Timothy Middelkoop License Apache 2.0
 
 data='data/lewis-log.txt'
+limit=100
 
 import re
 
@@ -29,6 +30,7 @@ jobs={}
 
 class Job:
     number=None
+    task=None
     tag={}
     events=[]
     
@@ -50,22 +52,40 @@ class Job:
                     self.tag[a]=True
                 self.tag[_tag]=_value
                 #print "??",_tag,_value
-            self.number=int(self.tag['Job'])
-            jobs[self.number]=self
-        elif re.match('^(.+):\s+(.+)[\.\;]$',line):
-            date,data=re.match('^(.+):\s+(.+)[\.\;]$',line).groups() ## yes duplicates
+            m=re.match('(\d+)(\[(\d+)\])?',self.tag['Job'])
+            self.number=int(m.group(1))
+            if m.group(2):
+                self.task=int(m.group(3))
+            jobs[self.tag['Job']]=self
+        elif re.match('^(.+ \d+:\d+:\d+):\s+(.+)$',line):
+            date,data=re.match('^(.+ \d+:\d+:\d+):\s+(.+)$',line).groups() ## yes duplicates
             self.event(date,data)
         else:
             print "job.extract> Unknown",line
             
     def event(self,date,data):
-        if re.match('^Completed',data):
-            if data=='Completed <done>':
+        print "??", date
+        if re.match('^Submitted from host',data):
+            pass
+        elif re.match('^Completed',data):
+            if data=='Completed <done>.':
                 self.tag['Completed']=True
             else:
                 self.tag['Completed']=False
+        elif re.match('^Dispatched',data):
+            cores=1
+            m=re.match('^Dispatched to (\d+)',data)
+            if m:
+                cores=m.group(1)
+            self.tag['cores']=cores
+        elif re.search('dispatched to',data):
+            cores=1
+            m=re.match('\[\d+\] dispatched to (\d+)',data)
+            if m:
+                cores=m.group(1)
+            self.tag['cores']=cores
         else:
-            print "job.event>",date,data
+            print "job.event> |%s|%s|" % (date,data)
             
     def summary(self,header,values):
         header=header.split()
@@ -75,32 +95,41 @@ class Job:
 
         
 def main(data):
-    print "lsfconvert>"
+    #print "lsfconvert>"
     count=0
     job=None
     summary=0
     for line in lines(data):
-        #print "!!",line
-        if re.match('^---',line):
-            job=Job()
-            summary=0
-            count+=1
-            line=None
-            if count>100:
-                return
-        elif re.match('^Accounting',line):
-            summary=1
-        elif summary:
-            summary+=1
-            if summary==2:
-                header=line
-            elif summary==3 and job:
-                job.summary(header,line)
-        elif job:
-            job.extract(line)
+        try:
+            #print "!!",line
+            if re.match('^---',line):
+                job=Job()
+                summary=0
+                count+=1
+                line=None
+                if limit and count>=limit:
+                    break
+            elif re.match('^Accounting',line):
+                summary=1
+            elif summary:
+                summary+=1
+                if summary==2:
+                    header=line
+                elif summary==3 and job:
+                    job.summary(header,line)
+            elif job:
+                job.extract(line)
+        except Exception as e:
+            import traceback
+            print "lsfconvert>",line
+            print e
+            traceback.print_exc()
+            exit()
+    print "lsfconvert>", count
 
-    print count
-
+def display(jobs):
+    for j in jobs.values():
+        print j
 
 ## Custom line iterator to remove EOL and wrapped
 def lines(data):
@@ -118,7 +147,6 @@ def lines(data):
 
 if __name__=='__main__':
     main(data)
-    for j in jobs.values():
-        print j
+    display(jobs)
 
 
