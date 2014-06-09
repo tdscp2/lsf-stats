@@ -1,7 +1,7 @@
 #!/usr/bin/python
 ## lsf-convert Copyright 2014 Timothy Middelkoop License Apache 2.0
 
-data='data/lewis-log.txt'
+data=open('lewis-log.txt')
 limit=100
 
 import re
@@ -64,7 +64,7 @@ class Job:
             print "job.extract> Unknown",line
             
     def event(self,date,data):
-        print "??", date
+        #print "??", date
         if re.match('^Submitted from host',data):
             pass
         elif re.match('^Completed',data):
@@ -134,7 +134,7 @@ def display(jobs):
 ## Custom line iterator to remove EOL and wrapped
 def lines(data):
     line=None
-    for l in open(data).xreadlines():
+    for l in data.xreadlines():
         l=l[0:-1]
         if re.match('^                     ',l):
             line+=l[21:]
