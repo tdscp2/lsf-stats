@@ -1,8 +1,10 @@
 #!/usr/bin/python
 ## lsf-convert Copyright 2014 Timothy Middelkoop License Apache 2.0
 
-data='data/lewis-log.txt'
-limit=100
+data=open('lewis-log.txt')
+csv=open('lewis-log.csv','w')
+limit=False
+#limit=100000
 
 import re
 
@@ -26,37 +28,47 @@ Accounting information about this job:
 '''
 
 
-jobs={}
+jobs=[]
+meta=set()
 
 class Job:
     number=None
     task=None
-    tag={}
-    events=[]
+    tag=None
+    events=None
+    
+    def __init__(self):
+        self.tag={}
+        self.events=[]
     
     def __repr__(self):
         return "<%d: %s" % (self.number,str(self.tag))
+        
 
     def extract(self,line):
         #print "##",line
         if line=='':
             pass
+        ## Match Job
         elif re.match('^Job',line):
             attributes=line.split(', ')
             for a in attributes:
                 #print "??", a
-                match=re.match('^(.+)\s+\<(.+)\>$',a)
+                ## Match tag <>
+                match=re.match('^([\w\s]+) \<(.+)\>$',a)
                 if match:
                     _tag,_value=match.groups()
                 else:
                     self.tag[a]=True
                 self.tag[_tag]=_value
+                meta.add(_tag)
                 #print "??",_tag,_value
             m=re.match('(\d+)(\[(\d+)\])?',self.tag['Job'])
             self.number=int(m.group(1))
             if m.group(2):
                 self.task=int(m.group(3))
-            jobs[self.tag['Job']]=self
+            jobs.append(self)
+        ## Match Event date and data
         elif re.match('^(.+ \d+:\d+:\d+):\s+(.+)$',line):
             date,data=re.match('^(.+ \d+:\d+:\d+):\s+(.+)$',line).groups() ## yes duplicates
             self.event(date,data)
@@ -64,21 +76,24 @@ class Job:
             print "job.extract> Unknown",line
             
     def event(self,date,data):
-        print "??", date
+        #print "??", date
         if re.match('^Submitted from host',data):
             pass
         elif re.match('^Completed',data):
+            meta.add('Completed')
             if data=='Completed <done>.':
                 self.tag['Completed']=True
             else:
                 self.tag['Completed']=False
         elif re.match('^Dispatched',data):
+            meta.add('cores')
             cores=1
             m=re.match('^Dispatched to (\d+)',data)
             if m:
                 cores=m.group(1)
             self.tag['cores']=cores
         elif re.search('dispatched to',data):
+            meta.add('cores')
             cores=1
             m=re.match('\[\d+\] dispatched to (\d+)',data)
             if m:
@@ -91,6 +106,7 @@ class Job:
         header=header.split()
         values=values.split()
         for h,v in zip(header,values):
+            meta.add(h)
             self.tag[h]=v
 
         
@@ -128,13 +144,34 @@ def main(data):
     print "lsfconvert>", count
 
 def display(jobs):
-    for j in jobs.values():
+    for j in jobs:
         print j
+
+def write(jobs):
+    num_format = re.compile(r'^\-?[1-9][0-9]*\.?[0-9]*')
+    header=list(meta)
+    #print ','.join(header)
+    csv.write(','.join(header) + "\n")
+    for j in jobs:
+        output=[]
+        for h in header:
+            v=j.tag.get(h)
+            if v is None:
+                output.append('')
+            elif type(v) is type(True):
+                output.append('TRUE' if v else 'FALSE')
+            elif type(v) is type('') and num_format.match(v):
+                output.append(v)
+            else:
+                output.append("'%s'" % str(v))
+        #print ','.join(output)
+        csv.write(','.join(output))
+        csv.write("\n")
 
 ## Custom line iterator to remove EOL and wrapped
 def lines(data):
     line=None
-    for l in open(data).xreadlines():
+    for l in data.xreadlines():
         l=l[0:-1]
         if re.match('^                     ',l):
             line+=l[21:]
@@ -144,9 +181,9 @@ def lines(data):
             yield line
             line=l
 
-
 if __name__=='__main__':
     main(data)
-    display(jobs)
-
+    print meta
+    write(jobs)
+    print "lsfconvert> done"
 
