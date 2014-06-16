@@ -148,10 +148,10 @@ def display(jobs):
         print j
 
 def write(jobs):
-    num_format = re.compile(r'^\-?[1-9][0-9]*\.?[0-9]*')
+    num_format = re.compile(r'^\-?[0-9]+\.?[0-9]*\s*$')
     header=list(meta)
     #print ','.join(header)
-    csv.write(','.join(header) + "\n")
+    csv.write("\t".join(header) + "\n")
     for j in jobs:
         output=[]
         for h in header:
@@ -161,11 +161,11 @@ def write(jobs):
             elif type(v) is type(True):
                 output.append('TRUE' if v else 'FALSE')
             elif type(v) is type('') and num_format.match(v):
-                output.append(v)
+                output.append(str(float(v)))
             else:
-                output.append("'%s'" % str(v))
+                output.append(str(v))
         #print ','.join(output)
-        csv.write(','.join(output))
+        csv.write("\t".join(output))
         csv.write("\n")
 
 ## Custom line iterator to remove EOL and wrapped
