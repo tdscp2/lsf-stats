@@ -1,8 +1,8 @@
 #!/usr/bin/python
 ## lsf-convert Copyright 2014 Timothy Middelkoop License Apache 2.0
 
-data=open('lewis-log.txt')
-csv=open('lewis-log.csv','w')
+data=open('lewis-log.txt',encoding="latin-1")
+csv=open('lewis-log.csv','w',encoding="utf-8")
 limit=False
 #limit=100000
 
@@ -73,7 +73,7 @@ class Job:
             date,data=re.match('^(.+ \d+:\d+:\d+):\s+(.+)$',line).groups() ## yes duplicates
             self.event(date,data)
         else:
-            print "job.extract> Unknown",line
+            print("job.extract> Unknown",line)
             
     def event(self,date,data):
         #print "??", date
@@ -100,7 +100,7 @@ class Job:
                 cores=m.group(1)
             self.tag['cores']=cores
         else:
-            print "job.event> |%s|%s|" % (date,data)
+            print("job.event> |%s|%s|" % (date,data))
             
     def summary(self,header,values):
         header=header.split()
@@ -137,15 +137,15 @@ def main(data):
                 job.extract(line)
         except Exception as e:
             import traceback
-            print "lsfconvert>",line
-            print e
+            print("lsfconvert>",line)
+            print(e)
             traceback.print_exc()
             exit()
-    print "lsfconvert>", count
+    print("lsfconvert>", count)
 
 def display(jobs):
     for j in jobs:
-        print j
+        print(j)
 
 def write(jobs):
     num_format = re.compile(r'^\-?[0-9]+\.?[0-9]*\s*$')
@@ -171,7 +171,7 @@ def write(jobs):
 ## Custom line iterator to remove EOL and wrapped
 def lines(data):
     line=None
-    for l in data.xreadlines():
+    for l in data.readlines():
         l=l[0:-1]
         if re.match('^                     ',l):
             line+=l[21:]
@@ -183,7 +183,7 @@ def lines(data):
 
 if __name__=='__main__':
     main(data)
-    print meta
+    print(meta)
     write(jobs)
-    print "lsfconvert> done"
+    print("lsfconvert> done")
 
