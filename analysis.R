@@ -5,7 +5,5 @@
  n <- nrow(d) ; n
  names(d)
  
- summary(d$CPU_T)
- max(d$CPU_T)
- 
+ levels(d$Queue)
  

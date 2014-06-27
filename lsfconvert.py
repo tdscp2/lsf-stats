@@ -1,10 +1,10 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 ## lsf-convert Copyright 2014 Timothy Middelkoop License Apache 2.0
 
 data=open('lewis-log.txt',encoding="latin-1")
 csv=open('lewis-log.csv','w',encoding="utf-8")
 limit=False
-#limit=100000
+#limit=1000000
 
 import re
 
@@ -29,7 +29,7 @@ Accounting information about this job:
 
 
 jobs=[]
-meta=set()
+meta=set(['Job','Command'])
 
 class Job:
     number=None
@@ -51,6 +51,12 @@ class Job:
             pass
         ## Match Job
         elif re.match('^Job',line):
+            ## command is messy so extract explicitly.
+            match=re.match('(^Job.*),[ ]?Command <(.*)>$',line)
+            if not match:
+                raise Exception("job.extract> 'Command' not found")
+            line,command=match.groups()
+            self.tag['Command']=command
             attributes=line.split(', ')
             for a in attributes:
                 #print "??", a
@@ -162,6 +168,8 @@ def write(jobs):
                 output.append('TRUE' if v else 'FALSE')
             elif type(v) is type('') and num_format.match(v):
                 output.append(str(float(v)))
+            elif type(v) is type('') and v[1:4]=='ELF': ## Binary submission
+                output.append('ELF')
             else:
                 output.append(str(v))
         #print ','.join(output)
