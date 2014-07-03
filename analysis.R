@@ -1,17 +1,21 @@
- ## R analysis for lsf-stats Copyright 2014 Timothy Middelkoop and Tyler D. Stratton License Apache 2.0
- 
- ## Read data
- setwd("C:/Users/tstratton/Documents/Github")
- 
- d <- read.csv('lsf-stats/lewis-log.csv',sep="\t", header=TRUE)
- n <- nrow(d) ; n
- names(d)
- 
- summary(d$CPU_T)
- max(d$CPU_T)
+## R analysis for lsf-stats Copyright 2014 Timothy Middelkoop and Tyler D. Stratton License Apache 2.0
 
- onecore <- subset(d,d$cores==1)
- summary(d$cores)
-normal <- subset(d, d$Queue=="normal")
- normal[0:100,]
+######
+## Load Data
 
+## Read data
+d <- read.csv('lsf-stats/lewis-log.csv',sep="\t", header=TRUE);
+n <- nrow(d) ; n
+names(d)
+
+## Dates are always fun
+d$time <- strptime(d$time,format="%F %H:%M:%S")
+d$submit <- strptime(d$submit,format="%F %H:%M:%S")
+d$begin <- strptime(d$begin,format="%F %H:%M:%S")
+d$term <- strptime(d$term,format="%F %H:%M:%S")
+d$start <- strptime(d$start,format="%F %H:%M:%S")
+
+######
+## Analysis
+
+levels(d$Queue)

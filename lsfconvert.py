@@ -1,14 +1,19 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 ## lsf-convert Copyright 2014 Timothy Middelkoop License Apache 2.0
 
-data=open('lewis-log.txt',encoding="latin-1")
-csv=open('lewis-log.csv','w',encoding="utf-8")
+data=open('lsb.acct',encoding="latin-1")
+out=open('lewis-log.csv','w',encoding="utf-8")
+
 limit=False
 #limit=100000
 
-import re
+import csv
+import datetime
 
-### Example data
+### Data structures
+## http://www-01.ibm.com/support/knowledgecenter/SSETD4_9.1.2/lsf_config_ref/lsb.acct.5.dita
+
+### Example data from text file.
 '''
 ------------------------------------------------------------------------------
 
@@ -27,163 +32,212 @@ Accounting information about this job:
       0.02        6              6     exit         0.0035     2M     25M
 '''
 
+### Example data from lsb.acct (one line)
+'''
+"JOB_FINISH" "7.06" 1272051780 101 201 33816627 1 1272051774 0 0 1272051780 
+"sanders" "normal" "span[hosts=1] && bigmem" "" "" "lewis2.rnet.missouri.edu" 
+"gaussian" "" "test155.o%J" "test155.e%J" "1272051774.101" 0 1 "comp-002" 32 60.0 
+"test155" 
+"#BSUB -J test155;#BSUB -n 1;#BSUB -R ""span[hosts=1] && bigmem"";#BSUB -oo test155.o%J;#BSUB -eo test155.e%J;time run_g03 test155.com"
+0.006998 0.013997 0 0 -1 0 0 1854 0 0 0 0 -1 0 0 0 65 12 -1 "" 
+"default" 32512 1 "" "" 0 2080 25396 "" "" "" "" 0 "" 0 "" -1 "" "" "" "" -1 "" "" 12589072 "" 
+1272051780 "" "" 0
+'''
 
 jobs=[]
-meta=set()
+meta=list()
+first=True ## Collect metadata only once.
+keepAll=False
 
 class Job:
     number=None
-    task=None
     tag=None
-    events=None
     
     def __init__(self):
         self.tag={}
-        self.events=[]
     
     def __repr__(self):
         return "<%d: %s" % (self.number,str(self.tag))
         
+    def add(self,tag,value,keep=True,blank=False,date=False):
+        if not keep and not keepAll:
+            return value
+        if blank and (value=='' or value==0 or value=='0'):
+            value=None
+        if date:
+            if value=='0':
+                value=None
+            else:
+                value=str(datetime.datetime.fromtimestamp(int(value)))
+        self.tag[tag]=value
+        if first:
+            meta.append(tag)
+        return value
+    
+    def addMany(self,line,header,floating=True):
+        for h in header:
+            v=line.pop(0)
+            if floating==True:
+                v=float(v)
+            self.add(h,v)
 
     def extract(self,line):
-        #print "##",line
-        if line=='':
-            pass
-        ## Match Job
-        elif re.match('^Job',line):
-            attributes=line.split(', ')
-            for a in attributes:
-                #print "??", a
-                ## Match tag <>
-                match=re.match('^([\w\s]+) \<(.+)\>$',a)
-                if match:
-                    _tag,_value=match.groups()
-                else:
-                    self.tag[a]=True
-                self.tag[_tag]=_value
-                meta.add(_tag)
-                #print "??",_tag,_value
-            m=re.match('(\d+)(\[(\d+)\])?',self.tag['Job'])
-            self.number=int(m.group(1))
-            if m.group(2):
-                self.task=int(m.group(3))
-            jobs.append(self)
-        ## Match Event date and data
-        elif re.match('^(.+ \d+:\d+:\d+):\s+(.+)$',line):
-            date,data=re.match('^(.+ \d+:\d+:\d+):\s+(.+)$',line).groups() ## yes duplicates
-            self.event(date,data)
-        else:
-            print("job.extract> Unknown",line)
-            
-    def event(self,date,data):
-        #print "??", date
-        if re.match('^Submitted from host',data):
-            pass
-        elif re.match('^Completed',data):
-            meta.add('Completed')
-            if data=='Completed <done>.':
-                self.tag['Completed']=True
-            else:
-                self.tag['Completed']=False
-        elif re.match('^Dispatched',data):
-            meta.add('cores')
-            cores=1
-            m=re.match('^Dispatched to (\d+)',data)
-            if m:
-                cores=m.group(1)
-            self.tag['cores']=cores
-        elif re.search('dispatched to',data):
-            meta.add('cores')
-            cores=1
-            m=re.match('\[\d+\] dispatched to (\d+)',data)
-            if m:
-                cores=m.group(1)
-            self.tag['cores']=cores
-        else:
-            print("job.event> |%s|%s|" % (date,data))
-            
-    def summary(self,header,values):
-        header=header.split()
-        values=values.split()
-        for h,v in zip(header,values):
-            meta.add(h)
-            self.tag[h]=v
-
         
+        #print("##",line)
+        assert line.pop(0)=='JOB_FINISH'
+        assert line.pop(0)=='7.06' # structure version 
+
+        self.add('time',line.pop(0),date=True)
+        self.number=self.add('Job',int(line.pop(0)))
+
+        self.add('uid',int(line.pop(0)))
+        self.add('options',line.pop(0))
+        self.add('cores',int(line.pop(0)))
+
+        self.add('submit',line.pop(0),date=True)
+        self.add('begin',line.pop(0),date=True)
+        self.add('term',line.pop(0),date=True)
+        self.add('start',line.pop(0),date=True)
+
+        self.add('User',line.pop(0))
+        self.add('Queue',line.pop(0))
+
+        self.add('resources',line.pop(0))
+        self.add('dependency',line.pop(0))
+
+        self.add('preExecCmd',line.pop(0),False)
+        self.add('fromHost',line.pop(0),False)
+        self.add('cwd',line.pop(0))
+        
+        self.add('inFile',line.pop(0),False)
+        self.add('outFile',line.pop(0),False)
+        self.add('errFile',line.pop(0),False)
+        self.add('jobFile',line.pop(0),False)
+
+        ## Asked
+        n=self.add('numAskedHosts',int(line.pop(0)))
+        hosts=[]
+        for _ in range(0,n):
+            hosts.append(line.pop(0))
+        self.add('askedHosts','|'.join(hosts),True)
+        
+        ## Executed
+        n=self.add('numExHosts',int(line.pop(0)))
+        hosts=[]
+        for _ in range(0,n):
+            hosts.append(line.pop(0))
+        self.add('execHosts','|'.join(hosts),True)
+
+        ## Exit Status
+        v=self.add('jStatus',int(line.pop(0)))
+        assert v==32 or v==64
+        self.add('hostFactor',float(line.pop(0)))
+        
+        self.add('jobName',line.pop(0))
+        self.add('command',line.pop(0),False)
+        
+        ## Resource Usage
+        self.addMany(line,['ru_utime','ru_stime','ru_maxrss','ru_ixrss','ru_ismrss','ru_idrss','ru_isrss',
+                           'ru_minflt','ru_majflt','ru_nswap','ru_inblock','ru_oublock','ru_ioch',
+                           'ru_msgsnd','ru_msgrcv','ru_nsignals','ru_nvcsw','ru_nivcsw','ru_exutime'])
+        
+        self.add('mailUser',line.pop(0),False)
+        self.add('projectname',line.pop(0),blank=True)
+        self.add('exitStatus',int(line.pop(0)),False)
+        
+        self.add('maxNumProcessors',line.pop(0))
+        
+        self.add('loginShell',line.pop(0),False)
+        
+        assert self.add('timeEvent',line.pop(0),False)==''
+        self.add('idx',int(line.pop(0)))
+
+        self.add('maxRMem',int(line.pop(0)))
+        self.add('maxRSwap',int(line.pop(0)))
+
+        assert self.add('inFileSpool',line.pop(0),False)==''
+        assert self.add('commandSpool',line.pop(0),False)==''
+        assert self.add('rsvId',line.pop(0),False)==''
+        assert self.add('sla',line.pop(0),False)==''
+        
+        self.add('exceptMask',int(line.pop(0))) ## Bitmask
+
+        ## Skip the next 15 entries
+        line=line[15-1:-1]
+        
+        assert self.add('jobDescription',line.pop(0),False)==''
+        
+        ## Skip the next 4 entries
+        line=line[4-1:-1]
+        
+        assert len(line)==0
+        
+        #print("job.extract> Unknown %d:%s" % (self.number,line))
+
+        ## Hack to only generate metadata once.
+        global first
+        if first:
+            first=False
+
+
+def write(jobs):
+    writer=csv.writer(out,delimiter="\t",quoting=csv.QUOTE_MINIMAL)
+    header=list(meta)
+    #header.sort()
+    writer.writerow(header)
+    try:
+        for j in jobs:
+            output=[]
+            for k in header:
+                v=j.tag.get(k,'')
+                output.append(v)
+            #print("##",output)
+            writer.writerow(output)
+    except Exception as e:
+        import traceback
+        print("lsfconvert>",output)
+        print(e)
+        traceback.print_exc()
+        exit()
+
+def display(jobs):
+    header=list(meta)
+    #header.sort()
+    print(header)
+    for k in header:
+        print("-------- %s ---------" % k)
+        for j in jobs:
+            v=j.tag.get(k,None)
+            if v:
+                print(v)
+       
 def main(data):
-    #print "lsfconvert>"
+    print("lsfconvert>")
     count=0
-    job=None
-    summary=0
-    for line in lines(data):
+    reader=csv.reader(data,delimiter=' ',quotechar='"')
+    for line in reader:
+        display=list(line)
         try:
-            #print "!!",line
-            if re.match('^---',line):
-                job=Job()
-                summary=0
-                count+=1
-                line=None
-                if limit and count>=limit:
-                    break
-            elif re.match('^Accounting',line):
-                summary=1
-            elif summary:
-                summary+=1
-                if summary==2:
-                    header=line
-                elif summary==3 and job:
-                    job.summary(header,line)
-            elif job:
-                job.extract(line)
+            count+=1
+            j=Job()
+            if limit and count>=limit:
+                break
+            j.extract(line)
+            jobs.append(j)
         except Exception as e:
             import traceback
+            print("lsfconvert>",display)
             print("lsfconvert>",line)
             print(e)
             traceback.print_exc()
             exit()
     print("lsfconvert>", count)
 
-def display(jobs):
-    for j in jobs:
-        print(j)
-
-def write(jobs):
-    num_format = re.compile(r'^\-?[0-9]+\.?[0-9]*\s*$')
-    header=list(meta)
-    #print ','.join(header)
-    csv.write("\t".join(header) + "\n")
-    for j in jobs:
-        output=[]
-        for h in header:
-            v=j.tag.get(h)
-            if v is None:
-                output.append('')
-            elif type(v) is type(True):
-                output.append('TRUE' if v else 'FALSE')
-            elif type(v) is type('') and num_format.match(v):
-                output.append(str(float(v)))
-            else:
-                output.append(str(v))
-        #print ','.join(output)
-        csv.write("\t".join(output))
-        csv.write("\n")
-
-## Custom line iterator to remove EOL and wrapped
-def lines(data):
-    line=None
-    for l in data.readlines():
-        l=l[0:-1]
-        if re.match('^                     ',l):
-            line+=l[21:]
-        elif line is None:
-            line=l
-        else:
-            yield line
-            line=l
 
 if __name__=='__main__':
     main(data)
     print(meta)
+    #display(jobs)
     write(jobs)
     print("lsfconvert> done")
 
